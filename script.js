@@ -8,16 +8,23 @@ imageInput.addEventListener("change", function () {
 
     const file = imageInput.files[0];
 
-    if (file) {
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = "block";
+    if (!file) return;
 
-        result.innerText = "Image uploaded successfully!";
+    if (!file.type.startsWith("image/")) {
+        result.innerText = "Please select a valid image.";
+        imageInput.value = "";
+        return;
     }
+
+    // Preview image
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+
+    result.innerText = "Image uploaded successfully!";
 
 });
 
-// Connect to Flask AI prediction API
+// AI prediction
 detectBtn.addEventListener("click", async function () {
 
     const file = imageInput.files[0];
@@ -30,7 +37,7 @@ detectBtn.addEventListener("click", async function () {
     const formData = new FormData();
     formData.append("image", file);
 
-    result.innerText = "AI is analyzing your plant leaf...";
+    result.innerText = "🌱 AI is analyzing your plant leaf...";
     detectBtn.disabled = true;
 
     try {
@@ -40,13 +47,25 @@ detectBtn.addEventListener("click", async function () {
             body: formData
         });
 
-        const data = await response.json();
+        // Handle invalid JSON responses
+        let data;
 
-        if (!response.ok) {
-            throw new Error(data.error || "Prediction failed.");
+        try {
+            data = await response.json();
+        } catch {
+            throw new Error(
+                "Server returned an invalid response. Please try again."
+            );
         }
 
-        // Display complete detection result
+        // Handle backend errors
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.error || "Disease prediction failed."
+            );
+        }
+
+        // Display detection result
         result.innerHTML = `
             <h3>🌱 Detection Result</h3>
 
