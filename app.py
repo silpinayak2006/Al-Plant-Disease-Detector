@@ -4,28 +4,36 @@ import numpy as np
 import json
 from PIL import Image
 from io import BytesIO
+import os
 
 app = Flask(__name__)
 
 # Load trained model
+MODEL_PATH = "plant_disease_model.keras"
+
 model = tf.keras.models.load_model(
-    "plant_disease_model.keras"
+    MODEL_PATH,
+    compile=False
 )
 
 # Load class names
 with open("class_names.json", "r") as f:
     class_names = json.load(f)
-    disease_info = {
+
+# Disease information
+disease_info = {
     "Apple___Cedar_apple_rust": {
         "description": "Cedar Apple Rust is a fungal disease affecting apple trees.",
-
-        "symptoms": "Yellow or orange spots appear on leaves. Leaves may develop brown lesions.",
-
-        "treatment": "Remove severely infected leaves and seek local agricultural advice about suitable fungicides.",
-
-        "prevention": "Maintain good air circulation and manage nearby cedar or juniper hosts where practical."
+        "symptoms": "Yellow or orange spots appear on leaves.",
+        "treatment": "Remove severely infected leaves and seek agricultural advice.",
+        "prevention": "Maintain good air circulation."
     }
 }
+
+# Image prediction function
+@tf.function(reduce_retracing=True)
+def predict_image(image):
+    return model(image, training=False)
 
 
 @app.route("/")
@@ -52,17 +60,21 @@ def predict():
     try:
         file = request.files["image"]
 
-        img = Image.open(BytesIO(file.read())).convert("RGB")
+        img = Image.open(
+            BytesIO(file.read())
+        ).convert("RGB")
+
         img = img.resize((160, 160))
 
-        img_array = np.array(img)
+        img_array = np.array(img, dtype=np.float32)
         img_array = np.expand_dims(img_array, axis=0)
 
-        prediction = model.predict(img_array, verbose=0)
+        prediction = predict_image(img_array).numpy()
 
         index = int(np.argmax(prediction[0]))
 
         disease = class_names[index]
+
         confidence = float(prediction[0][index]) * 100
 
         info = disease_info.get(disease, {
@@ -82,8 +94,9 @@ def predict():
         })
 
     except Exception as e:
+        app.logger.exception("Prediction failed")
         return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
