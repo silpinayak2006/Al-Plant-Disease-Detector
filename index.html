@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Plant Disease Detector</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>🌿 Plant Disease Detector</h1>
+        <p>AI-powered plant health checker</p>
+    </header>
+
+    <main class="container">
+        <h2>Detect Plant Diseases</h2>
+        <p>Upload a picture of your plant leaf.</p>
+
+        <input type="file" id="imageInput" accept="image/*">
+
+        <div class="preview">
+            <img id="preview" width="200" style="display:none;" alt="plant leaf preview">
+        </div>
+
+        <button id="detectBtn">Detect Disease</button>
+
+        <div id="result">
+            Your detection result will appear here.
+        </div>
+    </main>
+
+    <footer>
+        <p>AI Plant Disease Detector | 2026</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
