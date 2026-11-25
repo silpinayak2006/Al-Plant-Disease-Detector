@@ -1,10 +1,17 @@
+import os
+
+# Limit TensorFlow resource usage
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 from flask import Flask, request, jsonify, send_from_directory
 import tensorflow as tf
 import numpy as np
 import json
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
-import os
 
 app = Flask(__name__)
 
@@ -13,6 +20,10 @@ app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 MODEL_PATH = "plant_disease_model.keras"
 CLASS_NAMES_PATH = "class_names.json"
+
+# TensorFlow thread configuration
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
 
 # Load trained model
 try:
@@ -43,7 +54,6 @@ disease_info = {
 
 # Image preprocessing
 def preprocess_image(file):
-
     try:
         image = Image.open(
             BytesIO(file.read())
@@ -64,12 +74,13 @@ def preprocess_image(file):
         return image_array
 
     except (UnidentifiedImageError, OSError, ValueError) as e:
-        raise ValueError("Invalid or corrupted image file.") from e
+        raise ValueError(
+            "Invalid or corrupted image file."
+        ) from e
 
 
 # Disease prediction
 def predict_disease(image_array):
-
     try:
         predictions = model(
             image_array,
@@ -83,7 +94,9 @@ def predict_disease(image_array):
             raise ValueError("Invalid prediction batch.")
 
         if predictions.shape[1] != len(class_names):
-            raise ValueError("Model output does not match class names.")
+            raise ValueError(
+                "Model output does not match class names."
+            )
 
         if not np.all(np.isfinite(predictions)):
             raise ValueError("Invalid prediction values.")
@@ -103,7 +116,9 @@ def predict_disease(image_array):
 
     except Exception as e:
         app.logger.exception("Prediction failed")
-        raise RuntimeError("Unable to process prediction.") from e
+        raise RuntimeError(
+            "Unable to process prediction."
+        ) from e
 
 
 # Home page
@@ -143,7 +158,6 @@ def predict():
         }), 400
 
     try:
-
         # Process image
         image_array = preprocess_image(file)
 
@@ -168,21 +182,18 @@ def predict():
         }), 200
 
     except ValueError as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
         }), 400
 
     except RuntimeError:
-
         return jsonify({
             "success": False,
             "error": "Prediction failed. Please try again."
         }), 500
 
     except Exception:
-
         app.logger.exception("Unexpected server error")
 
         return jsonify({
