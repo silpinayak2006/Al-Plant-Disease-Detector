@@ -1,6 +1,6 @@
 import os
 
-# TensorFlow resource optimization
+# Limit TensorFlow resource usage on Render
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -14,240 +14,288 @@ from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 
 app = Flask(__name__)
-
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 MODEL_PATH = "plant_disease_model.keras"
 CLASS_NAMES_PATH = "class_names.json"
 
-# TensorFlow configuration
 tf.config.threading.set_intra_op_parallelism_threads(1)
 tf.config.threading.set_inter_op_parallelism_threads(1)
 
-# Load AI model
-try:
-    model = tf.keras.models.load_model(
-        MODEL_PATH,
-        compile=False
-    )
-    app.logger.info("AI model loaded successfully")
+model = tf.keras.models.load_model(MODEL_PATH, compile=False)
 
-except Exception:
-    app.logger.exception("Model loading failed")
-    raise
-
-# Load class names
-with open(CLASS_NAMES_PATH, "r") as f:
-    class_names = json.load(f)
+with open(CLASS_NAMES_PATH, "r") as file:
+    class_names = json.load(file)
 
 
-# ------------------------------------------------
-# DISEASE INFORMATION DATABASE
-# ------------------------------------------------
-
+# Disease information for all detected classes
 DISEASE_GUIDANCE = {
 
-    "Apple_scab": (
-        "Apple scab is a fungal disease affecting apple leaves and fruits.",
-        "Olive-green or dark spots appear on leaves. Severe infection can cause leaf drop.",
-        "Remove infected fallen leaves and follow locally recommended fungicide guidance.",
-        "Prune trees for better airflow and remove fallen infected leaves."
-    ),
+    "Apple___Apple_scab": {
+        "information": "Apple scab is a fungal disease that affects apple leaves and fruits.",
+        "symptoms": "Olive-green or dark spots appear on leaves and fruits. Infected leaves may fall.",
+        "treatment": "Remove infected leaves and fallen plant material. Consult an agricultural expert about suitable fungicides.",
+        "prevention": "Maintain orchard hygiene, prune trees for good air circulation, and use resistant varieties."
+    },
 
-    "Apple_Black_rot": (
-        "Black rot is a fungal disease affecting apple trees.",
-        "Brown leaf spots, dead branches and dark fruit rot may occur.",
-        "Remove infected plant parts and manage the disease using locally recommended fungicides.",
-        "Maintain orchard sanitation and remove mummified fruits."
-    ),
+    "Apple___Black_rot": {
+        "information": "Black rot is a fungal disease that affects apple leaves, branches, and fruits.",
+        "symptoms": "Dark leaf spots, dead branches, and black, rotting fruit may appear.",
+        "treatment": "Remove infected fruits and branches. Use suitable registered fungicides on expert advice.",
+        "prevention": "Remove fallen fruits and dead branches and maintain proper orchard sanitation."
+    },
 
-    "Apple_Cedar_apple_rust": (
-        "Cedar apple rust is a fungal disease affecting apple trees.",
-        "Yellow or orange spots appear on leaves, sometimes with orange structures underneath.",
-        "Remove severely infected leaves and follow agricultural disease-management advice.",
-        "Maintain airflow and manage nearby alternate host plants where practical."
-    ),
+    "Apple___Cedar_apple_rust": {
+        "information": "Cedar apple rust is a fungal disease that affects apple leaves and fruits.",
+        "symptoms": "Yellow-orange spots appear on leaves. Orange structures may develop on the underside.",
+        "treatment": "Remove nearby infected plant material where practical. Consult an expert about suitable fungicide treatment.",
+        "prevention": "Choose resistant apple varieties and manage nearby alternate host plants where appropriate."
+    },
 
-    "Cherry_Powdery_mildew": (
-        "Powdery mildew is a fungal disease affecting cherry plants.",
-        "White powder-like growth appears on leaves and shoots.",
-        "Remove badly infected shoots and use locally recommended disease controls.",
-        "Improve airflow and avoid excessive nitrogen fertilizer."
-    ),
+    "Apple___Apple_healthy": {
+        "information": "The apple leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Continue proper watering, balanced nutrition, pruning, and regular plant inspection."
+    },
 
-    "Corn_Cercospora_leaf_spot Gray_leaf_spot": (
-        "Gray leaf spot is a fungal disease affecting maize.",
-        "Long rectangular gray or tan lesions develop between leaf veins.",
-        "Use locally recommended disease-management practices and remove crop residues where appropriate.",
-        "Grow resistant varieties and rotate crops."
-    ),
+    "Blueberry___healthy": {
+        "information": "The blueberry leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain suitable soil acidity, proper watering, and regular plant inspection."
+    },
 
-    "Corn_Common_rust": (
-        "Common rust is a fungal disease of maize.",
-        "Small reddish-brown raised pustules appear on both leaf surfaces.",
-        "Use resistant varieties and seek local agricultural advice about fungicide use.",
-        "Plant resistant hybrids and monitor crops regularly."
-    ),
+    "Cherry_(including_sour)___Powdery_mildew": {
+        "information": "Powdery mildew is a fungal disease that affects cherry leaves and shoots.",
+        "symptoms": "White powdery patches appear on leaves and young shoots. Leaves may become distorted.",
+        "treatment": "Remove badly infected plant parts and consult an expert about suitable fungicides.",
+        "prevention": "Provide good air circulation, avoid excessive nitrogen, and maintain proper spacing."
+    },
 
-    "Corn_Northern_Leaf_Blight": (
-        "Northern leaf blight is a fungal disease affecting maize.",
-        "Long cigar-shaped gray-green lesions develop on leaves.",
-        "Remove infected crop residues and use locally recommended disease controls.",
-        "Use resistant varieties and practise crop rotation."
-    ),
+    "Cherry_(including_sour)___healthy": {
+        "information": "The cherry leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain proper watering, pruning, and regular monitoring."
+    },
 
-    "Grape_Black_rot": (
-        "Black rot is a fungal disease affecting grapevines.",
-        "Brown circular leaf spots and shrivelled black fruits may appear.",
-        "Remove infected berries and plant debris and follow local disease-control advice.",
-        "Maintain good airflow and remove infected plant material."
-    ),
+    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot": {
+        "information": "Gray leaf spot is a fungal disease affecting maize leaves.",
+        "symptoms": "Long, rectangular gray or brown lesions develop between leaf veins.",
+        "treatment": "Remove infected crop residue where practical. Consult an agricultural expert about suitable fungicides.",
+        "prevention": "Use resistant varieties, crop rotation, and proper field sanitation."
+    },
 
-    "Grape_Esca_(Black_Measles)": (
-        "Esca, also called black measles, is a complex grapevine trunk disease.",
-        "Leaves may show yellow or red patterns with green veins. Fruits may develop dark spots.",
-        "Remove severely affected wood and consult a grape-production specialist.",
-        "Protect pruning wounds and use healthy planting material."
-    ),
+    "Corn_(maize)___Common_rust_": {
+        "information": "Common rust is a fungal disease affecting maize plants.",
+        "symptoms": "Small reddish-brown raised pustules appear on both surfaces of leaves.",
+        "treatment": "Use resistant varieties and seek expert advice if the infection is severe.",
+        "prevention": "Grow resistant maize varieties and monitor crops regularly."
+    },
 
-    "Grape_Leaf_blight_(Isariopsis_Leaf_Spot)": (
-        "Grape leaf blight is a fungal leaf disease.",
-        "Brown or reddish-brown spots develop on leaves and may cause premature leaf fall.",
-        "Remove infected leaves and seek local recommendations for disease management.",
-        "Improve air circulation and maintain vineyard sanitation."
-    ),
+    "Corn_(maize)___Northern_Leaf_Blight": {
+        "information": "Northern leaf blight is a fungal disease affecting maize leaves.",
+        "symptoms": "Long, cigar-shaped gray-green or brown lesions appear on leaves.",
+        "treatment": "Remove infected crop residue and consult an expert about appropriate disease management.",
+        "prevention": "Use resistant varieties, crop rotation, and proper field sanitation."
+    },
 
-    "Orange_Haunglongbing_(Citrus_greening)": (
-        "Citrus greening, or Huanglongbing, is a serious bacterial disease spread by psyllid insects.",
-        "Leaves develop irregular yellow patterns. Fruits may become small, misshapen and poorly coloured.",
-        "There is no reliable cure for infected trees. Consult agricultural authorities about tree removal and vector management.",
-        "Use certified planting material and monitor and manage citrus psyllids."
-    ),
+    "Corn_(maize)___healthy": {
+        "information": "The maize leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain balanced fertilization, proper irrigation, and regular crop monitoring."
+    },
 
-    "Peach_Bacterial_spot": (
-        "Bacterial spot is a disease affecting peach leaves and fruits.",
-        "Small dark spots develop on leaves and may lead to holes and premature leaf fall.",
-        "Remove severely infected material and seek local agricultural advice.",
-        "Use suitable resistant varieties and avoid working with wet plants."
-    ),
+    "Grape___Black_rot": {
+        "information": "Black rot is a fungal disease that affects grape leaves and berries.",
+        "symptoms": "Brown circular leaf spots and dark, shriveled berries may develop.",
+        "treatment": "Remove infected berries and leaves. Consult an expert about suitable fungicides.",
+        "prevention": "Maintain good vineyard sanitation, prune for airflow, and remove infected fruit."
+    },
 
-    "Pepper,_bell_Bacterial_spot": (
-        "Bacterial spot is a bacterial disease affecting bell pepper plants.",
-        "Small water-soaked spots develop on leaves and may become dark brown.",
-        "Remove infected plants or leaves where appropriate. Use disease-free seeds and locally recommended controls.",
-        "Avoid overhead watering, rotate crops and maintain field sanitation."
-    ),
+    "Grape___Esca_(Black_Measles)": {
+        "information": "Esca, also called black measles, is a complex grapevine disease.",
+        "symptoms": "Leaves may develop striped discoloration, while berries can show dark spots.",
+        "treatment": "Remove severely affected plant material where appropriate and seek professional vineyard advice.",
+        "prevention": "Use healthy planting material and protect pruning wounds using recommended practices."
+    },
 
-    "Potato_Early_blight": (
-        "Early blight is a fungal disease affecting potato plants.",
-        "Brown circular leaf spots with concentric rings appear, often on older leaves.",
-        "Remove infected leaves and follow locally recommended fungicide guidance.",
-        "Rotate crops and avoid leaving infected plant debris in the field."
-    ),
+    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)": {
+        "information": "Grape leaf blight is a fungal disease that damages grape leaves.",
+        "symptoms": "Brown or dark spots develop on leaves, sometimes leading to drying and leaf fall.",
+        "treatment": "Remove infected fallen leaves and consult an expert about suitable fungicide options.",
+        "prevention": "Maintain vineyard hygiene, proper spacing, and good air circulation."
+    },
 
-    "Potato_Late_blight": (
-        "Late blight is a serious disease caused by a water mould.",
-        "Water-soaked dark lesions develop on leaves and may spread rapidly in humid conditions.",
-        "Remove infected plant material and seek immediate agricultural advice about disease control.",
-        "Use healthy seed potatoes, resistant varieties and avoid prolonged leaf wetness."
-    ),
+    "Grape___healthy": {
+        "information": "The grape leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain proper pruning, irrigation, and regular vineyard inspection."
+    },
 
-    "Squash_Powdery_mildew": (
-        "Powdery mildew is a fungal disease affecting squash plants.",
-        "White powdery patches appear on leaves and may spread across the plant.",
-        "Remove severely affected leaves and use locally recommended disease controls.",
-        "Provide sufficient spacing and airflow and avoid excessive nitrogen."
-    ),
+    "Orange___Haunglongbing_(Citrus_greening)": {
+        "information": "Citrus greening, also called Huanglongbing (HLB), is a serious bacterial disease of citrus plants.",
+        "symptoms": "Leaves may show uneven yellowing, blotchy mottling, and fruits may become small or misshapen.",
+        "treatment": "There is no reliable cure for infected trees. Contact an agricultural expert for management advice.",
+        "prevention": "Use certified disease-free planting material and control the Asian citrus psyllid vector."
+    },
 
-    "Strawberry_Leaf_scorch": (
-        "Leaf scorch is a fungal disease affecting strawberry plants.",
-        "Small dark purple spots develop on leaves, with reddish-brown or scorched areas.",
-        "Remove infected leaves and seek local agricultural disease-management advice.",
-        "Maintain field sanitation and avoid excessive leaf wetness."
-    ),
+    "Peach___Bacterial_spot": {
+        "information": "Bacterial spot is a disease that affects peach leaves and fruits.",
+        "symptoms": "Small dark, water-soaked spots appear on leaves and fruits. Leaves may develop holes.",
+        "treatment": "Remove infected plant material where practical and consult an expert about approved treatments.",
+        "prevention": "Use healthy planting material, avoid overhead watering, and maintain orchard hygiene."
+    },
 
-    "Tomato_Bacterial_spot": (
-        "Bacterial spot is a bacterial disease affecting tomato plants.",
-        "Small dark spots appear on leaves, stems and fruits.",
-        "Remove infected plant material and use disease-free seeds and locally recommended controls.",
-        "Rotate crops, avoid overhead irrigation and maintain sanitation."
-    ),
+    "Peach___healthy": {
+        "information": "The peach leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain proper pruning, watering, and regular orchard inspection."
+    },
 
-    "Tomato_Early_blight": (
-        "Early blight is a fungal disease affecting tomato plants.",
-        "Brown spots with concentric rings appear on older leaves.",
-        "Remove infected leaves and follow locally recommended fungicide guidance.",
-        "Use crop rotation, mulch and proper plant spacing."
-    ),
+    "Pepper,_bell___Bacterial_spot": {
+        "information": "Bacterial spot is a bacterial disease affecting pepper leaves and fruits.",
+        "symptoms": "Small, dark, water-soaked spots appear on leaves. Spots may become brown, and infected leaves may fall.",
+        "treatment": "Remove infected plant parts where practical. Use disease-free seeds and consult an expert about registered treatments.",
+        "prevention": "Use healthy seeds, avoid overhead watering, maintain proper spacing, and remove infected plant debris."
+    },
 
-    "Tomato_Late_blight": (
-        "Late blight is a destructive tomato disease caused by a water mould.",
-        "Large water-soaked dark patches appear on leaves and stems. White growth may develop underneath.",
-        "Remove infected plants or plant parts and seek immediate agricultural advice.",
-        "Use healthy seedlings, avoid overhead watering and monitor crops regularly."
-    ),
+    "Pepper,_bell___healthy": {
+        "information": "The bell pepper leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain balanced watering, proper nutrition, and regular crop monitoring."
+    },
 
-    "Tomato_Leaf_Mold": (
-        "Tomato leaf mold is a fungal disease that commonly develops in humid conditions.",
-        "Pale yellow patches appear on upper leaf surfaces, with olive-green mold underneath.",
-        "Remove infected leaves and improve ventilation. Follow local disease-control advice.",
-        "Reduce humidity around plants and provide good airflow."
-    ),
+    "Potato___Early_blight": {
+        "information": "Early blight is a fungal disease affecting potato leaves and sometimes tubers.",
+        "symptoms": "Brown spots with circular rings develop on older leaves, often creating a target-like appearance.",
+        "treatment": "Remove infected plant debris and consult an expert about suitable fungicides.",
+        "prevention": "Use healthy seed potatoes, rotate crops, and avoid prolonged leaf wetness."
+    },
 
-    "Tomato_Septoria_leaf_spot": (
-        "Septoria leaf spot is a fungal disease affecting tomato leaves.",
-        "Small circular spots with gray centres and dark borders develop on leaves.",
-        "Remove infected lower leaves and follow locally recommended disease controls.",
-        "Use mulch, rotate crops and avoid wetting foliage."
-    ),
+    "Potato___Late_blight": {
+        "information": "Late blight is a serious disease of potato caused by a fungus-like organism.",
+        "symptoms": "Water-soaked dark patches develop on leaves. White growth may appear underneath in humid conditions.",
+        "treatment": "Seek prompt agricultural advice. Remove infected plants where recommended and use approved treatments.",
+        "prevention": "Use healthy seed potatoes, resistant varieties, proper spacing, and regular field monitoring."
+    },
 
-    "Tomato_Spider_mites Two-spotted_spider_mite": (
-        "Two-spotted spider mites are tiny pests that feed on tomato leaves.",
-        "Leaves develop small yellow dots, bronzing and sometimes fine webbing.",
-        "Inspect leaf undersides and use suitable locally approved mite-control methods.",
-        "Monitor plants regularly and conserve beneficial predatory insects."
-    ),
+    "Potato___healthy": {
+        "information": "The potato leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Use healthy seed potatoes and maintain proper irrigation and crop rotation."
+    },
 
-    "Tomato_Target_Spot": (
-        "Target spot is a fungal disease affecting tomato plants.",
-        "Brown circular leaf spots develop, sometimes with concentric rings.",
-        "Remove infected leaves and follow locally recommended disease-management practices.",
-        "Maintain airflow, rotate crops and avoid prolonged leaf wetness."
-    ),
+    "Raspberry___healthy": {
+        "information": "The raspberry leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain proper pruning, watering, and regular plant inspection."
+    },
 
-    "Tomato_Tomato_Yellow_Leaf_Curl_Virus": (
-        "Tomato yellow leaf curl is a viral disease transmitted mainly by whiteflies.",
-        "Leaves curl upward, become yellow and plants may show stunted growth.",
-        "There is no cure for infected plants. Remove infected plants and manage whitefly populations.",
-        "Use resistant varieties and monitor whiteflies."
-    ),
+    "Soybean___healthy": {
+        "information": "The soybean leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Use quality seeds, maintain balanced nutrition, and monitor the crop regularly."
+    },
 
-    "Tomato_Tomato_mosaic_virus": (
-        "Tomato mosaic virus is a viral disease affecting tomato plants.",
-        "Leaves may show light and dark green mosaic patterns and become distorted.",
-        "There is no cure. Remove infected plants and disinfect tools to reduce spread.",
-        "Use virus-free seeds and maintain good hygiene."
-    )
-}
+    "Squash___Powdery_mildew": {
+        "information": "Powdery mildew is a fungal disease commonly affecting squash leaves.",
+        "symptoms": "White powdery patches develop on leaf surfaces. Leaves may turn yellow and dry.",
+        "treatment": "Remove badly infected leaves and consult an expert about suitable fungicide options.",
+        "prevention": "Provide good air circulation, avoid overcrowding, and water near the soil."
+    },
 
+    "Strawberry___Leaf_scorch": {
+        "information": "Leaf scorch is a fungal disease affecting strawberry leaves.",
+        "symptoms": "Small purple or reddish spots appear on leaves. The centers may become brown or gray.",
+        "treatment": "Remove infected leaves and consult an expert about appropriate disease management.",
+        "prevention": "Use healthy planting material, maintain good spacing, and remove infected plant debris."
+    },
 
-# ------------------------------------------------
-# HEALTHY PLANT INFORMATION
-# ------------------------------------------------
+    "Strawberry___healthy": {
+        "information": "The strawberry leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain proper watering, spacing, and regular plant inspection."
+    },
 
-HEALTHY_PLANTS = {
-    "Apple": "apple",
-    "Blueberry": "blueberry",
-    "Cherry": "cherry",
-    "Corn": "corn",
-    "Grape": "grape",
-    "Peach": "peach",
-    "Pepper,_bell": "bell pepper",
-    "Potato": "potato",
-    "Raspberry": "raspberry",
-    "Soybean": "soybean",
-    "Strawberry": "strawberry",
-    "Tomato": "tomato"
+    "Tomato___Bacterial_spot": {
+        "information": "Bacterial spot is a disease affecting tomato leaves, stems, and fruits.",
+        "symptoms": "Small dark spots appear on leaves and fruits. Leaves may yellow and fall.",
+        "treatment": "Remove infected plant material and consult an expert about approved treatments.",
+        "prevention": "Use disease-free seeds, avoid overhead watering, and maintain crop hygiene."
+    },
+
+    "Tomato___Early_blight": {
+        "information": "Early blight is a fungal disease affecting tomato leaves, stems, and fruits.",
+        "symptoms": "Brown spots with concentric rings appear on older leaves. Yellowing may develop around them.",
+        "treatment": "Remove infected leaves and consult an expert about suitable fungicides.",
+        "prevention": "Rotate crops, use healthy seedlings, and avoid wetting leaves during irrigation."
+    },
+
+    "Tomato___Late_blight": {
+        "information": "Late blight is a serious disease affecting tomato plants.",
+        "symptoms": "Water-soaked dark lesions develop on leaves and stems. White fungal-like growth may appear in humid weather.",
+        "treatment": "Seek prompt agricultural advice, remove infected material where recommended, and use approved treatments.",
+        "prevention": "Use healthy seedlings, avoid overhead irrigation, and monitor plants regularly."
+    },
+
+    "Tomato___Leaf_Mold": {
+        "information": "Tomato leaf mold is a fungal disease that mainly affects tomato leaves.",
+        "symptoms": "Pale yellow patches appear on upper leaf surfaces, with olive-green or gray growth underneath.",
+        "treatment": "Remove affected leaves and consult an expert about suitable fungicide options.",
+        "prevention": "Improve ventilation, avoid overcrowding, and reduce excessive humidity."
+    },
+
+    "Tomato___Septoria_leaf_spot": {
+        "information": "Septoria leaf spot is a fungal disease affecting tomato leaves.",
+        "symptoms": "Small circular spots with gray centers and dark edges appear on older leaves.",
+        "treatment": "Remove infected leaves and consult an agricultural expert about suitable fungicides.",
+        "prevention": "Rotate crops, remove plant debris, and avoid overhead watering."
+    },
+
+    "Tomato___Spider_mites Two-spotted_spider_mite": {
+        "information": "Two-spotted spider mites are tiny pests that feed on tomato leaves.",
+        "symptoms": "Leaves develop tiny pale spots, yellowing, and sometimes fine webbing.",
+        "treatment": "Inspect the undersides of leaves. Use suitable mite-control methods recommended by an agricultural expert.",
+        "prevention": "Monitor plants regularly, reduce dust, and protect beneficial insects."
+    },
+
+    "Tomato___Target_Spot": {
+        "information": "Target spot is a fungal disease affecting tomato leaves, stems, and fruits.",
+        "symptoms": "Brown circular spots with concentric rings develop on leaves and may cause leaf drop.",
+        "treatment": "Remove infected plant material and consult an expert about suitable fungicides.",
+        "prevention": "Maintain good air circulation, rotate crops, and avoid prolonged leaf wetness."
+    },
+
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus": {
+        "information": "Tomato yellow leaf curl is a viral disease commonly spread by whiteflies.",
+        "symptoms": "Leaves curl upward, turn yellow, and become smaller. Plant growth may be stunted.",
+        "treatment": "There is no direct cure for viral infection. Remove severely infected plants where recommended and manage whiteflies.",
+        "prevention": "Use healthy seedlings, control whiteflies, and remove infected plants and weeds."
+    },
+
+    "Tomato___Tomato_mosaic_virus": {
+        "information": "Tomato mosaic virus is a viral disease affecting tomato plants.",
+        "symptoms": "Leaves may show light and dark green mosaic patterns, distortion, and reduced growth.",
+        "treatment": "There is no direct cure. Remove infected plants where recommended and disinfect tools.",
+        "prevention": "Use virus-free seeds, wash hands before handling plants, and disinfect gardening tools."
+    },
+
+    "Tomato___healthy": {
+        "information": "The tomato leaf appears healthy, with no disease detected by the model.",
+        "symptoms": "No obvious disease symptoms are detected.",
+        "treatment": "No disease treatment is indicated by this prediction.",
+        "prevention": "Maintain proper watering, balanced nutrition, and regular crop monitoring."
+    }
 }
 
 
@@ -255,124 +303,22 @@ def get_disease_info(label):
 
     if label == "Background_without_leaves":
         return {
-            "description": "No plant leaf was detected. Please upload a clear plant leaf image.",
-            "symptoms": "Not applicable.",
-            "treatment": "Upload a suitable plant leaf image.",
-            "prevention": "Use clear images containing plant leaves."
+            "information": "The uploaded image may not contain a recognizable plant leaf.",
+            "symptoms": "No plant disease symptoms can be identified from this image.",
+            "treatment": "Upload a clear image of a plant leaf.",
+            "prevention": "Take a well-lit photograph with the leaf clearly visible."
         }
 
-    parts = label.split("___", 1)
-
-    if len(parts) != 2:
-        return {
-            "description": "Information is not available for this class.",
-            "symptoms": "Please consult an agricultural expert.",
-            "treatment": "Seek advice from a plant protection specialist.",
-            "prevention": "Maintain proper plant hygiene."
-        }
-
-    crop, condition = parts
-
-    if condition == "healthy":
-        crop_name = HEALTHY_PLANTS.get(crop, crop)
-
-        return {
-            "description": f"The {crop_name} plant appears healthy according to the AI model.",
-            "symptoms": "No disease symptoms were identified by the model.",
-            "treatment": "No disease treatment is indicated. Continue normal plant care.",
-            "prevention": "Provide proper watering, sunlight, nutrition and regular monitoring."
-        }
-
-    guidance = DISEASE_GUIDANCE.get(condition)
-
-    if guidance:
-        return {
-            "description": guidance[0],
-            "symptoms": guidance[1],
-            "treatment": guidance[2],
-            "prevention": guidance[3]
-        }
+    if label in DISEASE_GUIDANCE:
+        return DISEASE_GUIDANCE[label]
 
     return {
-        "description": "Information about this condition is not available yet.",
+        "information": "Detailed information for this class is not available yet.",
         "symptoms": "Please consult an agricultural expert.",
         "treatment": "Seek advice from a plant protection specialist.",
         "prevention": "Maintain proper plant hygiene."
     }
 
-
-# ------------------------------------------------
-# IMAGE PREPROCESSING
-# ------------------------------------------------
-
-def preprocess_image(file):
-
-    try:
-        image = Image.open(
-            BytesIO(file.read())
-        ).convert("RGB")
-
-        image = image.resize((160, 160))
-
-        image_array = np.asarray(
-            image,
-            dtype=np.float32
-        )
-
-        image_array = np.expand_dims(
-            image_array,
-            axis=0
-        )
-
-        return image_array
-
-    except (UnidentifiedImageError, OSError, ValueError) as e:
-        raise ValueError("Invalid or corrupted image file.") from e
-
-
-# ------------------------------------------------
-# AI PREDICTION
-# ------------------------------------------------
-
-def predict_disease(image_array):
-
-    try:
-        predictions = model(
-            image_array,
-            training=False
-        ).numpy()
-
-        if predictions.ndim != 2:
-            raise ValueError("Unexpected model output.")
-
-        if predictions.shape[0] != 1:
-            raise ValueError("Invalid prediction batch.")
-
-        if predictions.shape[1] != len(class_names):
-            raise ValueError("Model output does not match class names.")
-
-        if not np.all(np.isfinite(predictions)):
-            raise ValueError("Invalid prediction values.")
-
-        index = int(np.argmax(predictions[0]))
-
-        disease = class_names[index]
-
-        confidence = float(predictions[0][index]) * 100
-
-        return {
-            "disease": disease,
-            "confidence": round(confidence, 2)
-        }
-
-    except Exception as e:
-        app.logger.exception("Prediction failed")
-        raise RuntimeError("Unable to process prediction.") from e
-
-
-# ------------------------------------------------
-# WEBSITE ROUTES
-# ------------------------------------------------
 
 @app.route("/")
 def home():
@@ -385,85 +331,87 @@ def css():
 
 
 @app.route("/script.js")
-def js():
+def javascript():
     return send_from_directory(".", "script.js")
 
-
-# ------------------------------------------------
-# PREDICTION API
-# ------------------------------------------------
 
 @app.route("/predict", methods=["POST"])
 def predict():
 
-    if "image" not in request.files:
-        return jsonify({
-            "success": False,
-            "error": "Please upload an image."
-        }), 400
-
-    file = request.files["image"]
-
-    if not file.filename:
-        return jsonify({
-            "success": False,
-            "error": "No image selected."
-        }), 400
-
     try:
+        if "file" not in request.files:
+            return jsonify({
+                "success": False,
+                "error": "Please upload a leaf image."
+            }), 400
 
-        image_array = preprocess_image(file)
+        file = request.files["file"]
 
-        result = predict_disease(image_array)
+        if file.filename == "":
+            return jsonify({
+                "success": False,
+                "error": "No image selected."
+            }), 400
 
-        info = get_disease_info(result["disease"])
+        image = Image.open(BytesIO(file.read())).convert("RGB")
+        image = image.resize((160, 160))
+
+        image_array = np.asarray(image, dtype=np.float32)
+        image_array = np.expand_dims(image_array, axis=0)
+
+        predictions = model(image_array, training=False).numpy()
+
+        if predictions.ndim != 2 or predictions.shape[0] != 1:
+            raise ValueError("Unexpected model output.")
+
+        predicted_index = int(np.argmax(predictions[0]))
+
+        if isinstance(class_names, dict):
+            disease = class_names.get(
+                str(predicted_index),
+                class_names.get(predicted_index)
+            )
+        else:
+            disease = class_names[predicted_index]
+
+        if not disease:
+            raise ValueError("Disease class not found.")
+
+        confidence = float(predictions[0][predicted_index]) * 100
+
+        info = get_disease_info(disease)
 
         return jsonify({
             "success": True,
-            **result,
-            **info
-        }), 200
+            "disease": disease,
+            "confidence": round(confidence, 2),
+            "information": info["information"],
+            "symptoms": info["symptoms"],
+            "treatment": info["treatment"],
+            "prevention": info["prevention"]
+        })
 
-    except ValueError as e:
-
+    except UnidentifiedImageError:
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "Please upload a valid image."
         }), 400
 
-    except RuntimeError:
-
+    except Exception as e:
+        print("Prediction error:", str(e))
         return jsonify({
             "success": False,
-            "error": "Prediction failed. Please try again."
+            "error": "Unable to process the image. Please try again."
         }), 500
 
-    except Exception:
-
-        app.logger.exception("Unexpected server error")
-
-        return jsonify({
-            "success": False,
-            "error": "An unexpected server error occurred."
-        }), 500
-
-
-# ------------------------------------------------
-# FILE SIZE ERROR
-# ------------------------------------------------
 
 @app.errorhandler(413)
 def file_too_large(error):
-
     return jsonify({
         "success": False,
-        "error": "Image is too large. Maximum size is 5 MB."
+        "error": "Image is too large. Please upload an image under 5 MB."
     }), 413
 
 
-# ------------------------------------------------
-# RUN APPLICATION
-# ------------------------------------------------
-
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
