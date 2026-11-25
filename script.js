@@ -76,7 +76,7 @@ detectBtn.addEventListener("click", async function () {
             <hr>
 
             <h3>📖 Disease Information</h3>
-            <p>${data.description}</p>
+            <p>${data.information}</p>
 
             <h3>🔍 Symptoms</h3>
             <p>${data.symptoms}</p>
