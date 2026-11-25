@@ -35,7 +35,7 @@ detectBtn.addEventListener("click", async function () {
     }
 
     const formData = new FormData();
-    formData.append("image", file);
+    formData.append("file",imageInput.files[0]);
 
     result.innerText = "🌱 AI is analyzing your plant leaf...";
     detectBtn.disabled = true;
