@@ -1,4 +1,6 @@
 import os
+import json
+from io import BytesIO
 
 # Limit TensorFlow resource usage on Render
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
@@ -6,12 +8,10 @@ os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-from flask import Flask, request, jsonify, send_from_directory
-import tensorflow as tf
 import numpy as np
-import json
+import tensorflow as tf
+from flask import Flask, request, jsonify, send_from_directory
 from PIL import Image, UnidentifiedImageError
-from io import BytesIO
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -24,35 +24,35 @@ tf.config.threading.set_inter_op_parallelism_threads(1)
 
 model = tf.keras.models.load_model(MODEL_PATH, compile=False)
 
-with open(CLASS_NAMES_PATH, "r") as file:
+with open(CLASS_NAMES_PATH, "r", encoding="utf-8") as file:
     class_names = json.load(file)
 
 
-# Disease information for all detected classes
+# Disease information for all 38 plant classes
 DISEASE_GUIDANCE = {
 
     "Apple___Apple_scab": {
-        "information": "Apple scab is a fungal disease that affects apple leaves and fruits.",
+        "information": "Apple scab is a fungal disease affecting apple leaves and fruits.",
         "symptoms": "Olive-green or dark spots appear on leaves and fruits. Infected leaves may fall.",
         "treatment": "Remove infected leaves and fallen plant material. Consult an agricultural expert about suitable fungicides.",
         "prevention": "Maintain orchard hygiene, prune trees for good air circulation, and use resistant varieties."
     },
 
     "Apple___Black_rot": {
-        "information": "Black rot is a fungal disease that affects apple leaves, branches, and fruits.",
+        "information": "Black rot is a fungal disease affecting apple leaves, branches, and fruits.",
         "symptoms": "Dark leaf spots, dead branches, and black, rotting fruit may appear.",
         "treatment": "Remove infected fruits and branches. Use suitable registered fungicides on expert advice.",
         "prevention": "Remove fallen fruits and dead branches and maintain proper orchard sanitation."
     },
 
     "Apple___Cedar_apple_rust": {
-        "information": "Cedar apple rust is a fungal disease that affects apple leaves and fruits.",
-        "symptoms": "Yellow-orange spots appear on leaves. Orange structures may develop on the underside.",
-        "treatment": "Remove nearby infected plant material where practical. Consult an expert about suitable fungicide treatment.",
+        "information": "Cedar apple rust is a fungal disease affecting apple leaves and fruits.",
+        "symptoms": "Yellow-orange spots appear on leaves. Orange structures may develop underneath.",
+        "treatment": "Remove infected plant material where practical. Consult an expert about suitable fungicide treatment.",
         "prevention": "Choose resistant apple varieties and manage nearby alternate host plants where appropriate."
     },
 
-    "Apple___Apple_healthy": {
+    "Apple___healthy": {
         "information": "The apple leaf appears healthy, with no disease detected by the model.",
         "symptoms": "No obvious disease symptoms are detected.",
         "treatment": "No disease treatment is indicated by this prediction.",
@@ -66,42 +66,42 @@ DISEASE_GUIDANCE = {
         "prevention": "Maintain suitable soil acidity, proper watering, and regular plant inspection."
     },
 
-    "Cherry_(including_sour)___Powdery_mildew": {
-        "information": "Powdery mildew is a fungal disease that affects cherry leaves and shoots.",
+    "Cherry___Powdery_mildew": {
+        "information": "Powdery mildew is a fungal disease affecting cherry leaves and shoots.",
         "symptoms": "White powdery patches appear on leaves and young shoots. Leaves may become distorted.",
         "treatment": "Remove badly infected plant parts and consult an expert about suitable fungicides.",
         "prevention": "Provide good air circulation, avoid excessive nitrogen, and maintain proper spacing."
     },
 
-    "Cherry_(including_sour)___healthy": {
+    "Cherry___healthy": {
         "information": "The cherry leaf appears healthy, with no disease detected by the model.",
         "symptoms": "No obvious disease symptoms are detected.",
         "treatment": "No disease treatment is indicated by this prediction.",
         "prevention": "Maintain proper watering, pruning, and regular monitoring."
     },
 
-    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot": {
+    "Corn___Cercospora_leaf_spot Gray_leaf_spot": {
         "information": "Gray leaf spot is a fungal disease affecting maize leaves.",
         "symptoms": "Long, rectangular gray or brown lesions develop between leaf veins.",
         "treatment": "Remove infected crop residue where practical. Consult an agricultural expert about suitable fungicides.",
         "prevention": "Use resistant varieties, crop rotation, and proper field sanitation."
     },
 
-    "Corn_(maize)___Common_rust_": {
+    "Corn___Common_rust": {
         "information": "Common rust is a fungal disease affecting maize plants.",
         "symptoms": "Small reddish-brown raised pustules appear on both surfaces of leaves.",
         "treatment": "Use resistant varieties and seek expert advice if the infection is severe.",
         "prevention": "Grow resistant maize varieties and monitor crops regularly."
     },
 
-    "Corn_(maize)___Northern_Leaf_Blight": {
+    "Corn___Northern_Leaf_Blight": {
         "information": "Northern leaf blight is a fungal disease affecting maize leaves.",
         "symptoms": "Long, cigar-shaped gray-green or brown lesions appear on leaves.",
         "treatment": "Remove infected crop residue and consult an expert about appropriate disease management.",
         "prevention": "Use resistant varieties, crop rotation, and proper field sanitation."
     },
 
-    "Corn_(maize)___healthy": {
+    "Corn___healthy": {
         "information": "The maize leaf appears healthy, with no disease detected by the model.",
         "symptoms": "No obvious disease symptoms are detected.",
         "treatment": "No disease treatment is indicated by this prediction.",
@@ -109,7 +109,7 @@ DISEASE_GUIDANCE = {
     },
 
     "Grape___Black_rot": {
-        "information": "Black rot is a fungal disease that affects grape leaves and berries.",
+        "information": "Black rot is a fungal disease affecting grape leaves and berries.",
         "symptoms": "Brown circular leaf spots and dark, shriveled berries may develop.",
         "treatment": "Remove infected berries and leaves. Consult an expert about suitable fungicides.",
         "prevention": "Maintain good vineyard sanitation, prune for airflow, and remove infected fruit."
@@ -144,7 +144,7 @@ DISEASE_GUIDANCE = {
     },
 
     "Peach___Bacterial_spot": {
-        "information": "Bacterial spot is a disease that affects peach leaves and fruits.",
+        "information": "Bacterial spot is a disease affecting peach leaves and fruits.",
         "symptoms": "Small dark, water-soaked spots appear on leaves and fruits. Leaves may develop holes.",
         "treatment": "Remove infected plant material where practical and consult an expert about approved treatments.",
         "prevention": "Use healthy planting material, avoid overhead watering, and maintain orchard hygiene."
@@ -173,7 +173,7 @@ DISEASE_GUIDANCE = {
 
     "Potato___Early_blight": {
         "information": "Early blight is a fungal disease affecting potato leaves and sometimes tubers.",
-        "symptoms": "Brown spots with circular rings develop on older leaves, often creating a target-like appearance.",
+        "symptoms": "Brown spots with circular rings develop on older leaves.",
         "treatment": "Remove infected plant debris and consult an expert about suitable fungicides.",
         "prevention": "Use healthy seed potatoes, rotate crops, and avoid prolonged leaf wetness."
     },
@@ -309,15 +309,12 @@ def get_disease_info(label):
             "prevention": "Take a well-lit photograph with the leaf clearly visible."
         }
 
-    if label in DISEASE_GUIDANCE:
-        return DISEASE_GUIDANCE[label]
-
-    return {
+    return DISEASE_GUIDANCE.get(label, {
         "information": "Detailed information for this class is not available yet.",
         "symptoms": "Please consult an agricultural expert.",
         "treatment": "Seek advice from a plant protection specialist.",
         "prevention": "Maintain proper plant hygiene."
-    }
+    })
 
 
 @app.route("/")
@@ -356,6 +353,7 @@ def predict():
         image = Image.open(BytesIO(file.read())).convert("RGB")
         image = image.resize((160, 160))
 
+        # Keep preprocessing consistent with model training.
         image_array = np.asarray(image, dtype=np.float32)
         image_array = np.expand_dims(image_array, axis=0)
 
@@ -372,6 +370,9 @@ def predict():
                 class_names.get(predicted_index)
             )
         else:
+            if predicted_index >= len(class_names):
+                raise ValueError("Predicted class index is outside class_names.json.")
+
             disease = class_names[predicted_index]
 
         if not disease:
@@ -399,6 +400,7 @@ def predict():
 
     except Exception as e:
         print("Prediction error:", str(e))
+
         return jsonify({
             "success": False,
             "error": "Unable to process the image. Please try again."
@@ -407,6 +409,7 @@ def predict():
 
 @app.errorhandler(413)
 def file_too_large(error):
+
     return jsonify({
         "success": False,
         "error": "Image is too large. Please upload an image under 5 MB."
@@ -414,4 +417,7 @@ def file_too_large(error):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )
